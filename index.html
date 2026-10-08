@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Swank: a daily minefield puzzle</title>
+<meta name="description" content="Drive a tank across a new minefield every day to find the key. Everyone gets the same board.">
+<meta name="theme-color" content="#E8EDF1">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Swank: a daily minefield puzzle">
+<meta property="og:description" content="Drive a tank across a new minefield every day to find the key. Everyone gets the same board.">
+<meta property="og:image" content="https://zsnajar.github.io/swank/og.png">
+<meta property="og:url" content="https://zsnajar.github.io/swank/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Swank">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+:root {
+  --page: #E8EDF1;
+  --ink: #1F2A36;
+  --ink-2: #5D6B79;
+  --line: #CBD4DC;
+  --well: #DAE1E7;
+  --fog: #6F8396;
+  --fog-hi: #8A9DAF;
+  --fog-lo: #4F6172;
+  --open: #F6F8FA;
+  --t0: #D5E8D4;
+  --t1: #FBE6A2;
+  --t2: #F7C48E;
+  --t3: #EFA3A0;
+  --mine: #D23F3F;
+  --key: #E9AE0C;
+  --olive: #5F7F3C;
+  --font: "Bahnschrift", "DIN Alternate", "DIN Next", "Barlow", "Roboto Condensed", "Segoe UI", system-ui, sans-serif;
+  --gap: 4px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  padding: max(8px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  -webkit-tap-highlight-color: transparent;
+}
+.app { width: 100%; max-width: 440px; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+:focus-visible { outline: 3px solid var(--key); outline-offset: 2px; border-radius: 6px; }
+.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.view { display: none; }
+.view.on { display: block; }
+.pane { display: none; }
+.pane.on { display: block; }
+
+/* Display type: Bahnschrift's condensed bold; other DIN-likes fall back gracefully */
+.display { font-weight: 700; font-stretch: 75%; font-variation-settings: "wdth" 75; letter-spacing: -0.01em; line-height: 1.05; }
+
+/* TOP BAR */
+.bar { display: flex; align-items: center; gap: 2px; height: 56px; margin-bottom: 8px; }
+.brand { display: flex; align-items: center; gap: 8px; margin-right: auto; font-size: 1.75rem; }
+.brand svg { width: 30px; height: 30px; transform: rotate(90deg); }
+.bar-title { margin: 0 auto 0 4px; font-weight: 600; font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.icon-btn { width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; }
+.icon-btn:hover { background: var(--well); }
+.icon-btn[hidden] { display: none; }
+
+/* SEGMENTED CONTROLS */
+.seg { display: flex; background: var(--well); border-radius: 12px; padding: 4px; gap: 4px; }
+.seg button { flex: 1; padding: 9px 10px; border-radius: 9px; font-weight: 600; color: var(--ink-2); display: flex; align-items: center; justify-content: center; gap: 7px; line-height: 1.2; }
+.seg button small { display: block; font-weight: 400; font-size: 0.78rem; }
+.seg button[aria-pressed="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 0 #B9C3CC; }
+.tabs { margin-bottom: 26px; }
+
+/* HOME: DAILY */
+.date { display: flex; justify-content: space-between; align-items: baseline; color: var(--ink-2); }
+.op { font-size: 2.35rem; margin: 6px 0 24px; }
+.preview-map { display: grid; gap: 3px; margin: 0 auto 24px; width: fit-content; }
+.preview-map i { width: var(--pm); height: var(--pm); border-radius: 3px; background: var(--fog); box-shadow: inset 0 -2px 0 var(--fog-lo), inset 0 1px 0 var(--fog-hi); }
+.preview-map i.v { visibility: hidden; }
+.preview-map i.s { background: var(--olive); box-shadow: inset 0 -2px 0 #3E5527; }
+.rank { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 1.1rem; margin-bottom: 4px; }
+.pips { display: flex; gap: 3px; }
+.pips span { width: 16px; height: 7px; border-radius: 4px; background: #C5CED6; }
+.pips span.on { background: var(--ink); }
+.brief { color: var(--ink-2); margin-bottom: 22px; max-width: 34em; }
+.note { background: #fff; border-radius: 10px; padding: 11px 14px; margin-bottom: 14px; }
+.note.warn { background: #FFF4D6; }
+.countdown { text-align: center; color: var(--ink-2); margin-top: 14px; }
+.countdown b { color: var(--ink); font-weight: 600; }
+
+/* BUTTONS */
+.primary, .secondary { width: 100%; font-weight: 600; font-size: 1.08rem; padding: 15px 18px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 9px; }
+.primary { background: var(--ink); color: #fff; box-shadow: inset 0 -3px 0 #0E151C; }
+.secondary { background: #fff; color: var(--ink); box-shadow: inset 0 -3px 0 #C3CCD4, 0 0 0 1px var(--line); }
+.primary:active, .secondary:active { transform: translateY(1px); }
+
+/* HOME: CLASSIC */
+.field-label { display: block; font-weight: 600; margin: 22px 0 8px; }
+.diff-seg { margin-bottom: 4px; }
+.seed-input { width: 100%; font: inherit; font-size: 1.05rem; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+.seed-input::placeholder { color: #93A0AC; }
+.bests { margin: 22px 0; }
+.bests h3 { font-size: 1rem; margin-bottom: 6px; }
+.best-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.best-row button { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
+
+/* GAME: READOUTS */
+.hud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+.read { background: #fff; border-radius: 10px; padding: 7px 10px 8px; min-width: 0; }
+.read small { display: block; color: var(--ink-2); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.read strong { display: block; font-size: 1.6rem; line-height: 1.15; font-weight: 700; }
+.read.c0 { background: var(--t0); } .read.c1 { background: var(--t1); } .read.c2 { background: var(--t2); } .read.c3 { background: var(--t3); }
+.read.c0 small, .read.c1 small, .read.c2 small, .read.c3 small { color: var(--ink); opacity: 0.7; }
+.shells { display: flex; gap: 3px; height: 1.84rem; align-items: center; }
+.shells svg { width: 9px; height: 20px; color: var(--ink); }
+.shells svg.used { color: #C5CED6; }
+
+/* GAME: BOARD — tile size shrinks to fit the screen; --w is the board width, set from JS */
+.board-wrap { display: flex; justify-content: center; margin-bottom: 14px; }
+.board {
+  position: relative;
+  display: grid;
+  gap: var(--gap);
+  --tile: min(44px, calc((min(100vw - 32px, 408px) - (var(--w, 10) - 1) * var(--gap)) / var(--w, 10)));
+  grid-template-columns: repeat(var(--w, 10), var(--tile));
+}
+.t { width: var(--tile); height: var(--tile); border-radius: 6px; display: grid; place-items: center; font-weight: 700; font-size: calc(var(--tile) * 0.46); position: relative; cursor: default; }
+.t .i { width: 58%; height: 58%; }
+.t.void { visibility: hidden; }
+.t.fog { background: var(--fog); box-shadow: inset 0 -4px 0 var(--fog-lo), inset 0 2px 0 var(--fog-hi); cursor: pointer; }
+.t.fog:hover { background: #7B8FA2; }
+.t.flag { color: #FF9486; }
+.t.open { background: var(--open); box-shadow: inset 0 0 0 1px var(--line); }
+.t.c0 { background: var(--t0); box-shadow: none; }
+.t.c1 { background: var(--t1); box-shadow: none; }
+.t.c2 { background: var(--t2); box-shadow: none; }
+.t.c3 { background: var(--t3); box-shadow: none; }
+.t.safe::before { content: ''; width: 30%; height: 30%; border-radius: 50%; border: 2px solid #9AA8B5; }
+.t.cleared { color: var(--ink-2); }
+.t.cleared .i { opacity: 0.4; }
+.t.mine { background: #F3D3D1; color: var(--mine); box-shadow: none; animation: pop 0.22s ease-out both; animation-delay: var(--d, 0ms); }
+.t.boom { background: var(--mine); color: #fff; animation: boom 0.45s ease-out; z-index: 2; }
+.t.key { background: var(--key); color: var(--ink); box-shadow: inset 0 -4px 0 #B98A08; animation: keyfound 0.5s ease-out; }
+.t.pop { animation: pop 0.16s ease-out; }
+.t.can::after { content: ''; position: absolute; inset: 4px; border-radius: 4px; border: 2px solid rgba(255,255,255,0.8); pointer-events: none; }
+.t.open.can::after { border-color: rgba(31,42,54,0.3); }
+.board.aim .t.can::after { border-color: var(--mine); border-style: dashed; }
+.tank { position: absolute; left: 0; top: 0; display: grid; place-items: center; pointer-events: none; z-index: 3; transition: transform 0.14s ease-out; }
+.tank svg { width: 88%; height: 88%; transition: transform 0.14s ease-out; filter: drop-shadow(0 2px 0 rgba(31,42,54,0.25)); }
+.tank[hidden] { display: none; }
+@keyframes pop { from { transform: scale(0.84); } to { transform: scale(1); } }
+@keyframes boom { 0% { transform: scale(0.6); background: #fff; } 45% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes keyfound { 0% { transform: scale(0.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.shake { animation: shake 0.4s ease-in-out; }
+@keyframes shake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+
+.status { min-height: 3em; text-align: center; margin: 0 auto 12px; max-width: 30em; font-size: 1.02rem; }
+.tools button { padding: 11px 8px; }
+.tools[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+.hint { text-align: center; color: var(--ink-2); font-size: 0.88rem; margin-top: 12px; }
+@media (pointer: coarse) { .hint { display: none; } }
+
+/* SHEETS */
+.scrim { position: fixed; inset: 0; background: rgba(31,42,54,0.45); display: none; align-items: flex-end; justify-content: center; z-index: 50; }
+.scrim.on { display: flex; }
+.sheet { position: relative; background: #fff; width: 100%; max-width: 460px; border-radius: 18px 18px 0 0; padding: 22px 20px max(26px, env(safe-area-inset-bottom)); max-height: 92dvh; overflow: auto; animation: sheet-in 0.22s ease-out; }
+@media (min-width: 620px) { .scrim { align-items: center; } .sheet { border-radius: 18px; } }
+@keyframes sheet-in { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.sheet .close { position: absolute; top: 12px; right: 12px; }
+.sheet h2 { font-size: 1.9rem; margin: 2px 48px 6px 0; }
+.sub { color: var(--ink-2); margin-bottom: 18px; }
+.trail { font-size: 1.15rem; line-height: 1.35; letter-spacing: 1px; margin-bottom: 18px; white-space: pre-wrap; font-family: inherit; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); text-align: center; margin: 22px 0 18px; }
+.stats strong { display: block; font-size: 1.7rem; line-height: 1.1; }
+.stats small { color: var(--ink-2); font-size: 0.82rem; }
+.dist h3 { font-size: 1rem; margin-bottom: 8px; }
+.dist-row { display: grid; grid-template-columns: 104px 1fr; gap: 10px; align-items: center; margin: 5px 0; font-size: 0.92rem; }
+.dist-row > span { color: var(--ink-2); text-align: right; }
+.dist-bar { background: var(--well); border-radius: 4px; padding: 1px 8px; font-weight: 600; text-align: right; min-width: 28px; }
+.dist-bar.me { background: var(--ink); color: #fff; }
+.sheet-actions { display: grid; gap: 10px; margin-top: 22px; }
+.help-list { list-style: none; margin: 8px 0 4px; }
+.help-list li { display: grid; grid-template-columns: 40px 1fr; gap: 14px; align-items: center; margin-bottom: 16px; }
+.help-list .t { --tile: 40px; }
+.help-list .tank-demo { width: 40px; height: 40px; background: var(--t0); border-radius: 6px; display: grid; place-items: center; }
+.help-list .tank-demo svg { width: 34px; height: 34px; }
+
+.toast { position: fixed; top: max(16px, env(safe-area-inset-top)); left: 50%; transform: translate(-50%, -8px); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 10px; font-weight: 600; z-index: 100; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<!-- Icon set: drawn by hand on a 24px grid (tank on 32px) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="tank-art" viewBox="0 0 32 32">
+      <rect x="3.5" y="5" width="7" height="22" rx="2.5" fill="#2E3B2B"/>
+      <rect x="21.5" y="5" width="7" height="22" rx="2.5" fill="#2E3B2B"/>
+      <path d="M4.5 9h5M4.5 13h5M4.5 17h5M4.5 21h5M22.5 9h5M22.5 13h5M22.5 17h5M22.5 21h5" stroke="#55644F" stroke-width="1.2"/>
+      <rect x="8" y="7" width="16" height="18" rx="3.5" fill="#5F7F3C"/>
+      <rect x="14.6" y="1.5" width="2.8" height="12" rx="1.4" fill="#3E5527"/>
+      <circle cx="16" cy="17" r="5.6" fill="#7FA153" stroke="#3E5527" stroke-width="1.5"/>
+      <circle cx="16" cy="17" r="1.8" fill="#3E5527"/>
+    </symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.4 9.3a2.7 2.7 0 0 1 5.2 1c0 1.8-2.6 2.2-2.6 4"/><path d="M12 17.6v.1" stroke-width="2.6"/></symbol>
+    <symbol id="i-stats" viewBox="0 0 24 24"><path d="M5 20v-7M12 20V5M19 20v-10" stroke-width="2.6"/></symbol>
+    <symbol id="i-sound" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.2a4 4 0 0 1 0 5.6M18.2 6.6a7.6 7.6 0 0 1 0 10.8"/></symbol>
+    <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9.5l5 5M21 9.5l-5 5"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M8 7.3l4-3.8 4 3.8"/><path d="M7 10.5H5.5v9.5h13v-9.5H17"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-move" viewBox="0 0 24 24"><path d="M12 4v16M4 12h16M9.5 6.5 12 4l2.5 2.5M9.5 17.5 12 20l2.5-2.5M6.5 9.5 4 12l2.5 2.5M17.5 9.5 20 12l-2.5 2.5"/></symbol>
+    <symbol id="i-shoot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v5M12 16.5v5M2.5 12h5M16.5 12h5"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M6.5 21V3.5"/><path d="M6.5 4.5h11l-2.6 3.7 2.6 3.8h-11" fill="currentColor"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="12" r="4"/><path d="M11.5 12h9.5M18 12v3.2M21 12v2.4"/></symbol>
+    <symbol id="i-mine" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.6" fill="currentColor"/><path d="M12 2.8v3M12 18.2v3M2.8 12h3M18.2 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M5.5 18.5l2.1-2.1M16.4 7.6l2.1-2.1"/><circle cx="10" cy="10" r="1.3" fill="#fff" stroke="none"/></symbol>
+    <symbol id="i-burst" viewBox="0 0 24 24"><path d="M12 2.5l2 5.6 5.4-2.6-2.6 5.4 5.7 2-5.7 2 2.6 5.5-5.4-2.7-2 5.8-2-5.8-5.4 2.7 2.6-5.5-5.7-2 5.7-2-2.6-5.4 5.4 2.6z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></symbol>
+    <symbol id="shell" viewBox="0 0 10 20"><path d="M2 19V8.6C2 4.6 3.7 1.9 5 1c1.3.9 3 3.6 3 7.6V19z" fill="currentColor"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- HOME -->
+  <section id="home" class="view on">
+    <header class="bar">
+      <div class="brand display"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#tank-art"/></svg>Swank</div>
+      <button class="icon-btn" onclick="openHelp()" aria-label="How to play"><svg class="i"><use href="#i-help"/></svg></button>
+      <button class="icon-btn" onclick="openStats()" aria-label="Your record"><svg class="i"><use href="#i-stats"/></svg></button>
+      <button class="icon-btn mute" onclick="toggleMute()" aria-label="Turn sound off"><svg class="i"><use href="#i-sound"/></svg></button>
+    </header>
+
+    <div class="seg tabs">
+      <button id="tab-daily" aria-pressed="true" onclick="selectTab('daily')">Daily</button>
+      <button id="tab-classic" aria-pressed="false" onclick="selectTab('classic')">Classic</button>
+    </div>
+
+    <div id="pane-daily" class="pane on">
+      <div id="daily-card"></div>
+      <button class="primary" id="daily-btn" onclick="deployDaily()">Play today's board</button>
+      <p class="countdown">Next board in <b class="cd-time">--:--:--</b></p>
+    </div>
+
+    <div id="pane-classic" class="pane">
+      <p class="brief">The original game. A 10 by 10 field, you start in the top-left corner, and there's no key signal to help you. Play as often as you like.</p>
+      <span class="field-label">Difficulty</span>
+      <div class="seg diff-seg">
+        <button id="diff-easy" aria-pressed="false" onclick="selectDiff('easy')"><span>Easy<small>10 mines, 6 shots</small></span></button>
+        <button id="diff-medium" aria-pressed="true" onclick="selectDiff('medium')"><span>Medium<small>18 mines, 4 shots</small></span></button>
+        <button id="diff-hard" aria-pressed="false" onclick="selectDiff('hard')"><span>Hard<small>28 mines, 3 shots</small></span></button>
+      </div>
+      <label class="field-label" for="seed-input">Map seed</label>
+      <input type="text" inputmode="numeric" id="seed-input" class="seed-input" placeholder="Leave empty for a random map" maxlength="9">
+      <div class="bests" id="score-board"></div>
+      <button class="primary" onclick="deployGame()">Start a classic game</button>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="game" class="view">
+    <header class="bar">
+      <button class="icon-btn" onclick="leaveGame()" aria-label="Back to menu"><svg class="i"><use href="#i-back"/></svg></button>
+      <div class="bar-title" id="game-title"></div>
+      <button class="icon-btn" id="results-btn" onclick="openResults()" aria-label="See results" hidden><svg class="i"><use href="#i-stats"/></svg></button>
+      <button class="icon-btn mute" onclick="toggleMute()" aria-label="Turn sound off"><svg class="i"><use href="#i-sound"/></svg></button>
+    </header>
+
+    <div class="hud">
+      <div class="read" id="r-near"><small>Nearby</small><strong id="near">0</strong></div>
+      <div class="read" id="r-key"><small>To key</small><strong id="signal">0</strong></div>
+      <div class="read" id="r-flags"><small>Flags left</small><strong id="flags-left">0</strong></div>
+      <div class="read"><small>Shots</small><span class="shells" id="shells"></span></div>
+      <div class="read"><small>Moves</small><strong id="moves">0</strong></div>
+    </div>
+
+    <div class="board-wrap"><div class="board" id="board"><div class="tank" id="tank"><svg viewBox="0 0 32 32" aria-hidden="true"><use href="#tank-art"/></svg></div></div></div>
+    <p class="status" id="status" aria-live="polite"></p>
+
+    <div class="seg tools" id="tools">
+      <button id="tool-move" aria-pressed="true" onclick="setTool('move')"><svg class="i"><use href="#i-move"/></svg>Move</button>
+      <button id="tool-shoot" aria-pressed="false" onclick="setTool('shoot')"><svg class="i"><use href="#i-shoot"/></svg>Shoot</button>
+      <button id="tool-flag" aria-pressed="false" onclick="setTool('flag')"><svg class="i"><use href="#i-flag"/></svg>Flag</button>
+    </div>
+    <p class="hint">Arrow keys or WASD drive. Hold Shift to shoot, press F to flag.</p>
+  </section>
+
+</div>
+
+<div class="scrim" id="scrim" onclick="if(event.target===this)closeSheet()"><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" role="status"></div>
+<script>
+// ═══════════════════════════════════════════════════════════
+//  BOARD GENERATION — pure functions, no DOM (BEGIN-GEN)
+// ═══════════════════════════════════════════════════════════
+const COLS = 'ABCDEFGHIJKLMNOP';
+const DIFFS = { easy:{mines:10,bullets:6}, medium:{mines:18,bullets:4}, hard:{mines:28,bullets:3} };
+const N4 = [[0,-1],[0,1],[-1,0],[1,0]];
+const pk = (x,y) => x+','+y;
+
+function mkRng(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+function genSeed() { return Math.floor(100000 + Math.random() * 900000); }
+const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+
+function isCell(b,x,y) { return x>=0 && y>=0 && x<b.W && y<b.H && b.valid[y][x]; }
+function nbrs(b,x,y) { const r=[]; for (const [dx,dy] of N4) if (isCell(b,x+dx,y+dy)) r.push([x+dx,y+dy]); return r; }
+function mask(W,H,fn) { return Array.from({length:H}, (_,y) => Array.from({length:W}, (_,x) => !!fn(x,y))); }
+
+// BFS over open terrain; `blocked(x,y)` optionally excludes cells. Returns distance grid (-1 = unreachable).
+function bfs(b,sx,sy,blocked) {
+  const d = Array.from({length:b.H}, () => Array(b.W).fill(-1));
+  d[sy][sx] = 0; const q = [[sx,sy]];
+  for (let i = 0; i < q.length; i++) {
+    const [x,y] = q[i];
+    for (const [nx,ny] of nbrs(b,x,y)) if (d[ny][nx] < 0 && !(blocked && blocked(nx,ny))) { d[ny][nx] = d[y][x]+1; q.push([nx,ny]); }
+  }
+  return d;
+}
+
+// Weekday tiers, Monday → Sunday. density = share of open cells that are mines;
+// shots = how many forced shots the logic bot may need; slack = spare ammo on top of that.
+const TIERS = [
+  { rank:'RECRUIT',    density:0.10, shots:[0,1], slack:3, minSize:7 },
+  { rank:'PRIVATE',    density:0.13, shots:[0,1], slack:3, minSize:7 },
+  { rank:'CORPORAL',   density:0.16, shots:[1,2], slack:2, minSize:7 },
+  { rank:'SERGEANT',   density:0.18, shots:[1,2], slack:2, minSize:8 },
+  { rank:'LIEUTENANT', density:0.21, shots:[1,3], slack:1, minSize:8 },
+  { rank:'CAPTAIN',    density:0.24, shots:[2,3], slack:1, minSize:8 },
+  { rank:'COMMANDER',  density:0.27, shots:[2,4], slack:1, minSize:9 },
+];
+const MIN_PAR = 8;
+const TRAVEL_W = 2;      // bot: how much walking distance counts against heading toward the key
+const PAR_STRETCH = 2;    // par may be at most ~2× the plain walking distance to the key
+
+const SHAPES = [
+  { name:'OPEN FIELD', make:(W,H) => mask(W,H,() => true) },
+  { name:'CAVERN', make:(W,H,rng) => {
+      const v = mask(W,H,() => true);
+      let k = Math.round(W*H*0.09);
+      while (k > 0) {
+        let x = Math.floor(rng()*W), y = Math.floor(rng()*H);
+        const len = 1 + Math.floor(rng()*3);
+        for (let i = 0; i < len && k > 0; i++) {
+          if (v[y][x]) { v[y][x] = false; k--; }
+          const [dx,dy] = pick(rng,N4);
+          x = Math.min(W-1, Math.max(0, x+dx)); y = Math.min(H-1, Math.max(0, y+dy));
+        }
+      }
+      return v; } },
+  { name:'DIAMOND', make:(W,H) => { const cx=(W-1)/2, cy=(H-1)/2; return mask(W,H,(x,y) => Math.abs(x-cx)/(cx+0.5) + Math.abs(y-cy)/(cy+0.5) <= 1.1); } },
+  { name:'CROSSROADS', make:(W,H) => { const a=Math.max(1,Math.floor(W/3.5)), c=Math.max(1,Math.floor(H/3.5)); return mask(W,H,(x,y) => !((x<a||x>=W-a) && (y<c||y>=H-c))); } },
+  { name:'THE RING', make:(W,H) => { const a=Math.floor(W/3), c=Math.floor(H/3); return mask(W,H,(x,y) => !(x>=a && x<W-a && y>=c && y<H-c)); } },
+  { name:'DOGLEG', make:(W,H,rng) => { const qx=rng()<0.5, qy=rng()<0.5, hw=Math.floor(W/2), hh=Math.floor(H/2); return mask(W,H,(x,y) => !((qx ? x>=W-hw : x<hw) && (qy ? y>=H-hh : y<hh))); } },
+  { name:'THE BRIDGE', make:(W,H,rng) => {
+      const vert = W >= H, len = vert ? H : W, mid = Math.floor((vert ? W : H)/2);
+      const gaps = [Math.floor(rng()*len)]; if (rng() < 0.5) gaps.push(Math.floor(rng()*len));
+      return mask(W,H,(x,y) => vert ? (x !== mid || gaps.includes(y)) : (y !== mid || gaps.includes(x))); } },
+];
+
+// Drop any open cells not connected to the largest open region.
+function keepLargest(b) {
+  const seen = mask(b.W,b.H,() => false); let best = [];
+  for (let y = 0; y < b.H; y++) for (let x = 0; x < b.W; x++) {
+    if (!b.valid[y][x] || seen[y][x]) continue;
+    const comp = [[x,y]]; seen[y][x] = true;
+    for (let i = 0; i < comp.length; i++) for (const [nx,ny] of nbrs(b,comp[i][0],comp[i][1])) if (!seen[ny][nx]) { seen[ny][nx] = true; comp.push([nx,ny]); }
+    if (comp.length > best.length) best = comp;
+  }
+  b.valid = mask(b.W,b.H,() => false);
+  for (const [x,y] of best) b.valid[y][x] = true;
+  return best;
+}
+
+// Logic bot: only ever steps on cells it can prove are safe from the adjacency counts it has seen.
+// When nothing is provable it fires one shot at the most useful unknown cell (a shot always
+// resolves a cell: hit clears a mine, miss proves it safe). Returns moves taken and shots needed.
+function solve(b) {
+  const mines = new Set(b.mines), safe = new Set([pk(b.start.x,b.start.y), pk(b.key.x,b.key.y)]), known = new Set();
+  const visited = [[b.start.x,b.start.y]], vset = new Set([pk(b.start.x,b.start.y)]);
+  const man = (x,y) => Math.abs(x-b.key.x) + Math.abs(y-b.key.y);
+  let pos = { ...b.start }, moves = 0, shots = 0;
+  // Walk to (tx,ty) along the BFS distance grid, reading the count on every cell passed through.
+  const walk = (d, tx, ty) => {
+    moves += d[ty][tx];
+    for (let x = tx, y = ty; d[y][x] > 0; ) {
+      if (!vset.has(pk(x,y))) { visited.push([x,y]); vset.add(pk(x,y)); }
+      [x,y] = nbrs(b,x,y).find(([nx,ny]) => d[ny][nx] === d[y][x]-1);
+    }
+    pos = { x:tx, y:ty };
+  };
+  for (let guard = 0; guard < 2000; guard++) {
+    if (pos.x === b.key.x && pos.y === b.key.y) return { ok:true, moves, shots };
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const [x,y] of visited) {
+        let live = 0, km = 0; const unk = [];
+        for (const [nx,ny] of nbrs(b,x,y)) {
+          const k = pk(nx,ny);
+          if (mines.has(k)) live++;
+          if (known.has(k)) km++; else if (!safe.has(k)) unk.push(k);
+        }
+        if (!unk.length) continue;
+        const rem = live - km;
+        if (rem === 0) { unk.forEach(k => safe.add(k)); changed = true; }
+        else if (rem === unk.length) { unk.forEach(k => known.add(k)); changed = true; }
+      }
+    }
+    const d = bfs(b, pos.x, pos.y, (x,y) => !safe.has(pk(x,y)));
+    if (d[b.key.y][b.key.x] >= 0) { walk(d, b.key.x, b.key.y); continue; }
+    let best = null, bs = Infinity;
+    for (let y = 0; y < b.H; y++) for (let x = 0; x < b.W; x++) {
+      if (d[y][x] <= 0 || vset.has(pk(x,y))) continue;
+      const s = man(x,y) + TRAVEL_W*d[y][x];
+      if (s < bs) { bs = s; best = [x,y]; }
+    }
+    if (best) { walk(d, best[0], best[1]); continue; }
+    let shot = null, from = null; bs = Infinity;
+    for (let y = 0; y < b.H; y++) for (let x = 0; x < b.W; x++) {
+      if (d[y][x] < 0) continue;
+      for (const [nx,ny] of nbrs(b,x,y)) {
+        if (safe.has(pk(nx,ny))) continue;
+        const s = man(nx,ny) + TRAVEL_W*d[y][x];
+        if (s < bs) { bs = s; shot = [nx,ny]; from = [x,y]; }
+      }
+    }
+    if (!shot) return { ok:false, moves, shots };
+    walk(d, from[0], from[1]); shots++;
+    const k = pk(shot[0],shot[1]);
+    mines.delete(k); known.delete(k); safe.add(k);
+  }
+  return { ok:false, moves, shots };
+}
+
+function genCandidate(rng, T) {
+  const W = T.minSize + Math.floor(rng()*(11 - T.minSize));
+  const H = T.minSize + Math.floor(rng()*(12 - T.minSize));
+  const shape = pick(rng, SHAPES);
+  const b = { W, H, valid: shape.make(W,H,rng), shape: shape.name };
+  const cells = keepLargest(b);
+  if (cells.length < 30) return null;
+  // Start at an extreme of the map; key goes somewhere in the far 35% of it.
+  const r = pick(rng, cells);
+  let d = bfs(b, r[0], r[1]);
+  let far = Math.max(...cells.map(([x,y]) => d[y][x]));
+  const [sx,sy] = pick(rng, cells.filter(([x,y]) => d[y][x] === far));
+  b.start = { x:sx, y:sy };
+  d = bfs(b, sx, sy);
+  far = Math.max(...cells.map(([x,y]) => d[y][x]));
+  const [kx,ky] = pick(rng, cells.filter(([x,y]) => d[y][x] >= Math.ceil(far*0.65)));
+  b.key = { x:kx, y:ky };
+  const target = Math.max(1, Math.round(T.density*cells.length + (rng()-0.5)*2));
+  b.mines = new Set();
+  while (b.mines.size < target) {
+    const [x,y] = pick(rng, cells);
+    if ((x === sx && y === sy) || (x === kx && y === ky)) continue;
+    b.mines.add(pk(x,y));
+  }
+  return b;
+}
+
+// Same date → same board for everyone. Tries candidates until the bot's result lands in the tier's
+// target band, then sets ammo = shots the bot needed + the tier's slack, and par = the bot's moves.
+function genDaily(dateStr, tierIdx) {
+  const T = TIERS[tierIdx], rng = mkRng(hashStr('swank:' + dateStr));
+  let best = null, bestScore = Infinity;
+  for (let attempt = 0; attempt < 400 && bestScore > 0; attempt++) {
+    const b = genCandidate(rng, T);
+    if (!b) continue;
+    const r = solve(b);
+    if (!r.ok) continue;
+    // Penalise boards outside the tier's shot band, trivially short ones, and ones where
+    // a safe route means a long detour compared with simply walking to the key.
+    const [lo,hi] = T.shots, walkDist = bfs(b, b.start.x, b.start.y)[b.key.y][b.key.x];
+    const maxPar = Math.round(PAR_STRETCH * walkDist) + 4;
+    const score = (r.shots < lo ? lo - r.shots : r.shots > hi ? r.shots - hi : 0) * 10
+                + Math.max(0, MIN_PAR - r.moves) + Math.max(0, r.moves - maxPar);
+    if (score < bestScore) { bestScore = score; best = { b, r }; }
+  }
+  const { b, r } = best;
+  b.ammo = r.shots + T.slack; b.par = r.moves; b.botShots = r.shots;
+  return b;
+}
+
+const OP_A = ['IRON','SILENT','CRIMSON','BROKEN','HOLLOW','RUSTED','GHOST','NORTHERN','BLACK','STATIC','SCARLET','FROZEN','DESERT','MIDNIGHT','COPPER','EMERALD','SHATTERED','LONE','THUNDER','PALE','COBALT','VELVET','ASHEN','SUNKEN'];
+const OP_B = ['VIPER','ANVIL','HARBOR','LANTERN','CROW','MERIDIAN','CITADEL','MONSOON','FALCON','TRENCH','ORCHARD','BEACON','GLACIER','HORNET','COMPASS','PILGRIM','BASTION','EMBER','SPARROW','RIDGE','JACKAL','TIDE','FURNACE','KESTREL'];
+function opName(dateStr) { const r = mkRng(hashStr('op:' + dateStr)); const cap = w => w[0] + w.slice(1).toLowerCase(); return 'Operation ' + cap(pick(r,OP_A)) + ' ' + cap(pick(r,OP_B)); }
+
+// Classic 10×10 board — same RNG sequence as the original game so old seeds still replay.
+function genClassic(seed, cfg) {
+  const rng = mkRng(seed), b = { W:10, H:10, valid: mask(10,10,() => true), shape:'CLASSIC', start:{x:0,y:0}, mines:new Set(), ammo:cfg.bullets };
+  do { b.key = { x:Math.floor(rng()*10), y:Math.floor(rng()*10) }; }
+  while (b.key.x===0&&b.key.y===0);
+  while (b.mines.size < cfg.mines) {
+    const x = Math.floor(rng()*10), y = Math.floor(rng()*10);
+    if (x===0&&y===0) continue;
+    if (x===b.key.x&&y===b.key.y) continue;
+    b.mines.add(pk(x,y));
+  }
+  return b;
+}
+// (END-GEN)
+
+// ═══════════════════════════════════════════════════════════
+//  DAILY — dates, persistence, stats
+// ═══════════════════════════════════════════════════════════
+const EPOCH = Date.UTC(2026, 9, 8);   // board no. 1
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const BUCKETS = ['At or under par','1–3 over','4–7 over','8 or more over','Lost'];
+const SHAPE_TEXT = { 'OPEN FIELD':'An open field', 'CAVERN':'A rocky cavern', 'DIAMOND':'A diamond-shaped field', 'CROSSROADS':'A crossroads',
+                     'THE RING':'A ring around a rock outcrop', 'DOGLEG':'An L-shaped field', 'THE BRIDGE':'Two fields joined by a narrow bridge' };
+const titleCase = s => s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
+function localDateStr(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// ?date=YYYY-MM-DD previews another day's board without touching saved progress or stats.
+function dailyDate() {
+  const q = new URLSearchParams(location.search).get('date');
+  return q && /^\d{4}-\d{2}-\d{2}$/.test(q) ? q : localDateStr(new Date());
+}
+let _daily = null;
+function getDaily() {
+  const date = dailyDate();
+  if (_daily && _daily.date === date) return _daily;
+  const [y,m,d] = date.split('-').map(Number), utc = Date.UTC(y,m-1,d);
+  const wd = new Date(utc).getUTCDay(), tier = (wd + 6) % 7;
+  _daily = { date, no: Math.round((utc - EPOCH)/864e5) + 1, wd, tier, label: DAYS[wd]+' '+d+' '+MONTHS[m-1],
+             op: opName(date), board: genDaily(date, tier), preview: date !== localDateStr(new Date()) };
+  return _daily;
+}
+
+const memStore = {};
+function loadJSON(k, dflt) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : dflt; } catch { return dflt; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+function loadState(D) { return D.preview ? (memStore[D.date] ||= { actions:[], result:null }) : loadJSON('swank-daily:'+D.date, { actions:[], result:null }); }
+function saveState(D, st) { if (!D.preview) saveJSON('swank-daily:'+D.date, st); }
+function getStats() { return loadJSON('swank-daily-stats', { played:0, wins:0, cur:0, max:0, lastWin:null, dist:[0,0,0,0,0] }); }
+
+function bucketOf(r) { if (!r.won) return 4; const d = r.moves - r.par; return d <= 0 ? 0 : d <= 3 ? 1 : d <= 7 ? 2 : 3; }
+function parShort(r) { const d = r.moves - r.par; return d < 0 ? '−'+(-d) : d === 0 ? 'par' : '+'+d; }
+function parText(r) { const d = r.moves - r.par; return d < 0 ? `${-d} under par (${r.par})` : d === 0 ? `Right on par (${r.par})` : `${d} over par (${r.par})`; }
+
+function recordResult(D, r) {
+  if (D.preview) return;
+  const s = getStats();
+  s.played++;
+  if (r.won) { s.wins++; s.cur = s.lastWin === D.no - 1 ? s.cur + 1 : 1; s.max = Math.max(s.max, s.cur); s.lastWin = D.no; }
+  else s.cur = 0;
+  s.dist[bucketOf(r)]++;
+  saveJSON('swank-daily-stats', s);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ENGINE
+// ═══════════════════════════════════════════════════════════
+let G = {}, sel = 'medium', currentSeed = null, tool = 'move';
+
+const inGrid = (x,y) => isCell(G.b,x,y);
+const signal = () => Math.abs(G.tank.x-G.keyPos.x) + Math.abs(G.tank.y-G.keyPos.y);
+const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
+function countAdj(x,y) {
+  let n=0;
+  for (const [dx,dy] of N4)
+    if (G.mines.has(pk(x+dx,y+dy))) n++;
+  return n;
+}
+function nearText(n) { return n ? plural(n,'mine')+' next to you.' : 'No mines next to you.'; }
+function say(msg) { G.msg = msg; }
+
+function getScores() { return loadJSON('swank-scores', {}); }
+function saveScore(diff,steps,seed) {
+  const s=getScores();
+  if (!s[diff]||steps<s[diff].steps) { s[diff]={steps,seed,date:new Date().toLocaleDateString()}; saveJSON('swank-scores',s); return true; }
+  return false;
+}
+
+function startGame(b, mode, seed) {
+  G={mode,seed,b,W:b.W,H:b.H,mines:new Set(b.mines),cleared:new Set(),visited:new Set(),flags:new Set(),probed:new Set(),
+     keyPos:b.key,tank:{...b.start},dir:b.start.x<b.W/2?'east':'west',bullets:b.ammo,dead:false,reveal:false,
+     totalMines:b.mines.size,over:false,won:false,msg:'',steps:0,shotsFired:0,trail:[],silent:false};
+  G.visited.add(pk(b.start.x,b.start.y));
+  const near=nearText(countAdj(b.start.x,b.start.y));
+  say(mode==='daily' ? `The key is ${plural(signal(),'step')} away. ${near}` : `Find the key. ${near}`);
+}
+
+// Daily moves are recorded so a refresh resumes the same game instead of granting a fresh attempt.
+function rec(a) { if (G.mode==='daily'&&!G.silent) { G.state.actions.push(a); saveState(getDaily(),G.state); } }
+function applyAction(a) { if (a[0]==='m') move(a[1],a[2]); else if (a[0]==='s') shoot(a[1],a[2]); else if (a[0]==='f') toggleFlag(a[1],a[2]); }
+
+const DIR_MAP={'1,0':'east','-1,0':'west','0,-1':'north','0,1':'south'};
+const SQUARES=['🟩','🟨','🟧','🟥'];
+const live = () => !(G.over||G.won||G.dead);
+
+function move(dx,dy) {
+  if (!live()) return;
+  const nx=G.tank.x+dx,ny=G.tank.y+dy,k=pk(nx,ny);
+  if (!inGrid(nx,ny)) {
+    const inRect=nx>=0&&ny>=0&&nx<G.W&&ny<G.H;
+    say(inRect?"Rock. You can't drive through it.":"That's the edge of the field."); render(); return;
+  }
+  if (G.flags.has(k)) { say('That tile is flagged. Remove the flag to drive there.'); render(); return; }
+  rec(['m',dx,dy]);
+  G.dir=DIR_MAP[dx+','+dy]; G.tank={x:nx,y:ny};
+  G.visited.add(k);
+  G.steps++;
+  playAudio('move');
+  if (G.mines.has(k)) {
+    G.dead=true; G.reveal=true; G.trail.push('💥');
+    say('You drove onto a mine.');
+    finishDaily(false);
+    if (G.silent) return;
+    render(); triggerShake(); playAudio('death');
+    setTimeout(()=>endGame(false),1100); return;
+  }
+  if (nx===G.keyPos.x&&ny===G.keyPos.y) {
+    G.won=true; G.reveal=true; G.trail.push('🗝️');
+    say(`You found the key in ${plural(G.steps,'move')}.`);
+    finishDaily(true);
+    if (G.silent) return;
+    render(); playAudio('key');
+    setTimeout(()=>endGame(true),1300); return;
+  }
+  const adj=countAdj(nx,ny);
+  G.trail.push(SQUARES[Math.min(adj,3)]);
+  say(nearText(adj)+(G.mode==='daily'?` Key: ${plural(signal(),'step')} away.`:''));
+  render();
+}
+
+function shoot(dx,dy) {
+  if (!live()) return;
+  G.dir=DIR_MAP[dx+','+dy];
+  const tx=G.tank.x+dx,ty=G.tank.y+dy,k=pk(tx,ty);
+  if (G.bullets<=0) { say('Out of shots.'); render(); return; }
+  if (!inGrid(tx,ty)) { say('Nothing to shoot there.'); render(); return; }
+  rec(['s',dx,dy]);
+  G.bullets--; G.shotsFired++; tool='move';
+  playAudio('shoot');
+  G.flags.delete(k);
+  if (G.mines.has(k)) {
+    G.mines.delete(k); G.cleared.add(k); G.trail.push('🎯');
+    say(`Hit. That mine is gone. ${plural(G.bullets,'shot')} left.`);
+    playAudio('hit');
+  } else {
+    G.probed.add(k); G.trail.push('💨');
+    say(`Miss. That tile is safe. ${plural(G.bullets,'shot')} left.`);
+  }
+  render();
+}
+
+function toggleFlag(x,y) {
+  const k=pk(x,y);
+  if (!live()||!inGrid(x,y)||G.visited.has(k)||G.cleared.has(k)||G.probed.has(k)) return;
+  rec(['f',x,y]);
+  playAudio('click');G.flags.has(k)?G.flags.delete(k):G.flags.add(k);render();
+}
+
+function finishDaily(won) {
+  if (G.mode!=='daily'||G.state.result) return;
+  const D=getDaily(), b=G.b;
+  G.state.result={won,moves:G.steps,par:b.par,ammoUsed:G.shotsFired,ammo:b.ammo,destroyed:G.cleared.size,trail:G.trail.slice()};
+  saveState(D,G.state); recordResult(D,G.state.result);
+}
+
+function endGame(won) {
+  G.over=true;
+  if (!document.getElementById('game').classList.contains('on')) return;
+  document.getElementById('results-btn').hidden=false;
+  if (G.mode==='daily') openResults(); else openClassicResult(won);
+}
+
+// ═══════════════════════════════════════════════════════════
+//  AUDIO
+// ═══════════════════════════════════════════════════════════
+let _ac=null, _muted=false;
+function getAC(){if(!_ac)_ac=new(window.AudioContext||window.webkitAudioContext)();if(_ac.state==='suspended')_ac.resume();return _ac;}
+function playAudio(type){if(_muted||G.silent)return;try{const ac=getAC();({move:_move,shoot:_shoot,hit:_hit,death:_death,key:_key,click:_click}[type]||(() => {}))(ac);}catch(_){}}
+function _move(ac){const o=ac.createOscillator(),g=ac.createGain();o.type='sawtooth';o.frequency.setValueAtTime(110,ac.currentTime);o.frequency.exponentialRampToValueAtTime(55,ac.currentTime+0.07);g.gain.setValueAtTime(0.07,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.1);o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+0.11);}
+function _shoot(ac){
+  const len=ac.sampleRate*0.14,buf=ac.createBuffer(1,len,ac.sampleRate),data=buf.getChannelData(0);
+  for(let i=0;i<len;i++)data[i]=(Math.random()*2-1)*(1-i/len);
+  const src=ac.createBufferSource();src.buffer=buf;
+  const f=ac.createBiquadFilter();f.type='bandpass';f.frequency.value=1400;f.Q.value=0.9;
+  const g=ac.createGain();g.gain.setValueAtTime(0.28,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.14);
+  src.connect(f);f.connect(g);g.connect(ac.destination);src.start();
+  const o=ac.createOscillator(),og=ac.createGain();o.type='square';o.frequency.setValueAtTime(900,ac.currentTime);o.frequency.exponentialRampToValueAtTime(180,ac.currentTime+0.13);og.gain.setValueAtTime(0.05,ac.currentTime);og.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.13);o.connect(og);og.connect(ac.destination);o.start();o.stop(ac.currentTime+0.14);
+}
+function _hit(ac){
+  const len=ac.sampleRate*0.45,buf=ac.createBuffer(1,len,ac.sampleRate),data=buf.getChannelData(0);
+  for(let i=0;i<len;i++)data[i]=Math.random()*2-1;
+  const src=ac.createBufferSource();src.buffer=buf;
+  const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(900,ac.currentTime);f.frequency.exponentialRampToValueAtTime(60,ac.currentTime+0.45);
+  const g=ac.createGain();g.gain.setValueAtTime(0.55,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.45);
+  src.connect(f);f.connect(g);g.connect(ac.destination);src.start();
+}
+function _death(ac){
+  const len=ac.sampleRate*1.4,buf=ac.createBuffer(1,len,ac.sampleRate),data=buf.getChannelData(0);
+  for(let i=0;i<len;i++)data[i]=Math.random()*2-1;
+  const src=ac.createBufferSource();src.buffer=buf;
+  const f=ac.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(1400,ac.currentTime);f.frequency.exponentialRampToValueAtTime(30,ac.currentTime+1.2);
+  const g=ac.createGain();g.gain.setValueAtTime(0.75,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+1.4);
+  src.connect(f);f.connect(g);g.connect(ac.destination);src.start();
+  const o=ac.createOscillator(),og=ac.createGain();o.type='sawtooth';o.frequency.setValueAtTime(280,ac.currentTime);o.frequency.exponentialRampToValueAtTime(18,ac.currentTime+1.0);og.gain.setValueAtTime(0.22,ac.currentTime);og.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+1.1);o.connect(og);og.connect(ac.destination);o.start();o.stop(ac.currentTime+1.2);
+}
+function _key(ac){[523,659,784,1047,1319].forEach((freq,i)=>{const o=ac.createOscillator(),g=ac.createGain();o.type='sine';o.frequency.value=freq;const t=ac.currentTime+i*0.16;g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(0.22,t+0.04);g.gain.exponentialRampToValueAtTime(0.001,t+0.38);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+0.42);});}
+function _click(ac){const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=800;g.gain.setValueAtTime(0.055,ac.currentTime);g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+0.04);o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+0.05);}
+function toggleMute(){
+  _muted=!_muted;
+  document.querySelectorAll('.mute').forEach(b=>{b.querySelector('use').setAttribute('href',_muted?'#i-mute':'#i-sound');b.setAttribute('aria-label',_muted?'Turn sound on':'Turn sound off');});
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RENDERER
+// ═══════════════════════════════════════════════════════════
+let cellEls=[];
+const ic = id => `<svg class="i"><use href="#${id}"/></svg>`;
+
+function buildBoard(){
+  const board=document.getElementById('board'),tank=document.getElementById('tank');
+  board.style.setProperty('--w',G.W);
+  board.querySelectorAll('.t').forEach(e=>e.remove());
+  cellEls=[];
+  const frag=document.createDocumentFragment();
+  for(let y=0;y<G.H;y++){cellEls[y]=[];for(let x=0;x<G.W;x++){
+    const c=document.createElement('button');c.type='button';c.className='t';c.dataset.x=x;c.dataset.y=y;
+    if(!inGrid(x,y)){c.tabIndex=-1;c.setAttribute('aria-hidden','true');}
+    frag.appendChild(c);cellEls[y][x]=c;
+  }}
+  board.insertBefore(frag,tank);
+}
+
+function paint(x,y){
+  const el=cellEls[y][x],k=pk(x,y),onTank=x===G.tank.x&&y===G.tank.y;
+  let cls='t',html='',label;
+  if(!inGrid(x,y)) cls+=' void';
+  else if(G.dead&&onTank){cls+=' boom';html=ic('i-burst');label='mine, exploded';}
+  else if(G.reveal&&G.mines.has(k)){cls+=' mine';html=ic('i-mine');label='mine';el.style.setProperty('--d',(Math.abs(x-G.tank.x)+Math.abs(y-G.tank.y))*35+'ms');}
+  else if(G.reveal&&x===G.keyPos.x&&y===G.keyPos.y){cls+=' key';html=ic('i-key');label='key';}
+  else if(G.cleared.has(k)){cls+=' open cleared';html=ic('i-mine');label='destroyed mine';}
+  else if(G.visited.has(k)){const n=countAdj(x,y);cls+=' open c'+Math.min(n,3);html=n&&!onTank?n+'':'';label=plural(n,'mine')+' nearby';}
+  else if(G.probed.has(k)){cls+=' open safe';label='safe';}
+  else{cls+=' fog';label='unexplored';if(G.flags.has(k)){cls+=' flag';html=ic('i-flag');label='flagged';}}
+  if(live()&&tool!=='flag'&&inGrid(x,y)&&Math.abs(x-G.tank.x)+Math.abs(y-G.tank.y)===1) cls+=' can';
+  if(el._c===cls&&el._h===html) return;
+  // A tile that just stopped being fog gets a short press-in so the reveal reads as a response to the move.
+  const revealed=el._c&&el._c.includes(' fog')&&!cls.includes(' fog');
+  el.className=cls+(revealed&&!cls.includes(' mine')&&!cls.includes(' boom')&&!cls.includes(' key')?' pop':'');
+  el.innerHTML=html;el._c=cls;el._h=html;
+  if(label) el.setAttribute('aria-label',COLS[x]+(y+1)+', '+label);
+}
+
+function positionTank(){
+  const t=document.getElementById('tank'),el=cellEls[G.tank.y][G.tank.x];
+  t.hidden=G.dead;
+  t.style.width=el.offsetWidth+'px';t.style.height=el.offsetHeight+'px';
+  t.style.transform=`translate(${el.offsetLeft}px,${el.offsetTop}px)`;
+  t.firstElementChild.style.transform=`rotate(${{north:0,east:90,south:180,west:270}[G.dir]}deg)`;
+}
+
+function updateHUD(){
+  const n=countAdj(G.tank.x,G.tank.y);
+  document.getElementById('near').textContent=G.dead?'–':n;
+  document.getElementById('r-near').className='read'+(G.dead?'':' c'+Math.min(n,3));
+  document.getElementById('signal').textContent=signal();
+  document.getElementById('flags-left').textContent=G.totalMines-G.flags.size;
+  document.getElementById('moves').textContent=G.steps;
+  document.getElementById('shells').innerHTML=Array.from({length:G.b.ammo},(_,i)=>`<svg viewBox="0 0 10 20" class="${i<G.bullets?'':'used'}" aria-hidden="true"><use href="#shell"/></svg>`).join('');
+  document.getElementById('shells').setAttribute('aria-label',plural(G.bullets,'shot')+' left');
+  document.getElementById('status').textContent=G.msg;
+  document.getElementById('board').classList.toggle('aim',tool==='shoot');
+  ['move','shoot','flag'].forEach(t=>document.getElementById('tool-'+t).setAttribute('aria-pressed',t===tool));
+  document.getElementById('tools').setAttribute('aria-disabled',!live());
+}
+
+function render(){
+  if(G.silent) return;
+  updateHUD();
+  for(let y=0;y<G.H;y++) for(let x=0;x<G.W;x++) paint(x,y);
+  positionTank();
+}
+
+function triggerShake(){const b=document.getElementById('board');b.classList.remove('shake');void b.offsetWidth;b.classList.add('shake');b.addEventListener('animationend',()=>b.classList.remove('shake'),{once:true});}
+
+// ═══════════════════════════════════════════════════════════
+//  INPUT
+// ═══════════════════════════════════════════════════════════
+function setTool(t){ if(!live()) return; tool=tool===t&&t!=='move'?'move':t; playAudio('click'); render(); }
+
+function onTile(x,y){
+  if(!live()||!inGrid(x,y)) return;
+  if(tool==='flag'){toggleFlag(x,y);return;}
+  const dx=x-G.tank.x,dy=y-G.tank.y;
+  if(Math.abs(dx)+Math.abs(dy)!==1){say('Pick a tile right next to your tank.');render();return;}
+  tool==='shoot'?shoot(dx,dy):move(dx,dy);
+}
+
+document.getElementById('board').addEventListener('click',e=>{const c=e.target.closest('.t');if(c)onTile(+c.dataset.x,+c.dataset.y);});
+document.getElementById('board').addEventListener('contextmenu',e=>{const c=e.target.closest('.t');if(!c)return;e.preventDefault();toggleFlag(+c.dataset.x,+c.dataset.y);});
+
+const KEYS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0]};
+document.addEventListener('keydown',e=>{
+  if(document.getElementById('scrim').classList.contains('on')){ if(e.key==='Escape') closeSheet(); return; }
+  if(!document.getElementById('game').classList.contains('on')||e.target.tagName==='INPUT') return;
+  const k=e.key.length===1?e.key.toLowerCase():e.key;
+  if(k==='f'){setTool('flag');return;}
+  const d=KEYS[k];if(!d) return;
+  e.preventDefault();
+  (e.shiftKey||tool==='shoot')?shoot(d[0],d[1]):move(d[0],d[1]);
+});
+
+window.addEventListener('resize',()=>{ if(document.getElementById('game').classList.contains('on')) positionTank(); });
+
+// ═══════════════════════════════════════════════════════════
+//  SCREENS
+// ═══════════════════════════════════════════════════════════
+function show(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id===id));
+  if(id==='home'){renderDailyCard();renderScores();}
+  window.scrollTo(0,0);
+}
+
+function selectTab(t){
+  ['daily','classic'].forEach(k=>{
+    document.getElementById('tab-'+k).setAttribute('aria-pressed',k===t);
+    document.getElementById('pane-'+k).classList.toggle('on',k===t);
+  });
+}
+
+function selectDiff(d){sel=d;playAudio('click');['easy','medium','hard'].forEach(k=>document.getElementById('diff-'+k).setAttribute('aria-pressed',k===d));renderScores();}
+
+function enterGame(title){
+  const daily=G.mode==='daily';
+  document.getElementById('game-title').textContent=title;
+  document.getElementById('r-key').hidden=!daily;
+  document.getElementById('r-flags').hidden=daily;
+  document.getElementById('results-btn').hidden=!G.over;
+  tool='move';
+  buildBoard();
+  const t=document.getElementById('tank');t.style.transition='none';
+  show('game');render();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{t.style.transition='';}));
+}
+
+function deployGame(seed){
+  playAudio('click');
+  const sv=document.getElementById('seed-input').value.trim();
+  seed=seed??(/^\d+$/.test(sv)?+sv:genSeed());
+  currentSeed=seed;
+  startGame(genClassic(seed,DIFFS[sel]),'classic',seed);
+  enterGame(`Classic, ${sel}`);
+}
+
+function deployDaily(){
+  playAudio('click');
+  const D=getDaily(),st=loadState(D);
+  startGame(D.board,'daily',D.date);
+  G.state=st;
+  if(st.actions.length){
+    G.silent=true; st.actions.forEach(applyAction); G.silent=false;
+    if(!st.result) say(`Welcome back. Your ${plural(G.steps,'move')} were saved. `+nearText(countAdj(G.tank.x,G.tank.y)));
+  }
+  if(st.result){G.over=true;G.reveal=true;}
+  enterGame(D.op);
+  if(st.result) openResults();
+}
+
+function leaveGame(){ closeSheet(); show('home'); }
+
+// ── home ──
+function renderDailyCard(){
+  const D=getDaily(),b=D.board,st=loadState(D),T=TIERS[D.tier];
+  const pm=Math.max(12,Math.min(22,Math.floor((210-(b.W-1)*3)/b.W)));
+  let map='';
+  for(let y=0;y<b.H;y++) for(let x=0;x<b.W;x++) map+=`<i class="${x===b.start.x&&y===b.start.y?'s':b.valid[y][x]?'':'v'}"></i>`;
+  const moves=st.actions.filter(a=>a[0]==='m').length;
+  let note='';
+  if(D.preview) note+=`<p class="note warn">You're previewing the board for another day. Nothing you do here is saved.</p>`;
+  if(st.result) note+=`<p class="note">${st.result.won?`You found the key in ${plural(st.result.moves,'move')}, ${parText(st.result).toLowerCase()}.`:`You hit a mine on move ${st.result.moves}. Come back tomorrow for a new board.`}</p>`;
+  else if(moves) note+=`<p class="note">You're ${plural(moves,'move')} into this board. Your progress is saved.</p>`;
+  document.getElementById('daily-card').innerHTML=
+    `<p class="date"><span>${D.label}</span><span>No. ${D.no}</span></p>`+
+    `<h1 class="op display">${D.op}</h1>`+
+    `<div class="preview-map" style="grid-template-columns:repeat(${b.W},${pm}px);--pm:${pm}px" role="img" aria-label="Shape of today's board">${map}</div>`+
+    `<div class="rank"><span>${titleCase(T.rank)}</span><span class="pips" aria-label="Difficulty ${D.tier+1} of 7">${Array.from({length:7},(_,i)=>`<span class="${i<=D.tier?'on':''}"></span>`).join('')}</span></div>`+
+    `<p class="brief">${SHAPE_TEXT[b.shape]}, ${b.W} by ${b.H}, with ${b.mines.size} mines. You have ${plural(b.ammo,'shot')}.</p>`+note;
+  document.getElementById('daily-btn').textContent=st.result?"See today's result":moves?"Resume today's board":"Play today's board";
+}
+
+function renderScores(){
+  const el=document.getElementById('score-board'),scores=getScores();
+  const rows=['easy','medium','hard'].filter(d=>scores[d]).map(d=>
+    `<div class="best-row"><span>${titleCase(d)}: ${plural(scores[d].steps,'move')}</span><button onclick="loadSeed(${scores[d].seed})">Use map ${scores[d].seed}</button></div>`);
+  el.innerHTML=rows.length?'<h3>Your best games</h3>'+rows.join(''):'';
+}
+
+function loadSeed(seed){const inp=document.getElementById('seed-input');inp.value=seed;inp.focus();playAudio('click');}
+
+// ── sheets ──
+function openSheet(html){
+  const s=document.getElementById('sheet');
+  s.innerHTML=`<button class="icon-btn close" onclick="closeSheet()" aria-label="Close">${ic('i-close')}</button>`+html;
+  document.getElementById('scrim').classList.add('on');
+  (s.querySelector('.primary')||s.querySelector('.close')).focus();
+}
+function closeSheet(){ document.getElementById('scrim').classList.remove('on'); }
+
+function statsBlock(D,r){
+  const s=getStats(),streak=s.lastWin!=null&&s.lastWin>=D.no-1?s.cur:0,mx=Math.max(1,...s.dist),mine=r&&!D.preview?bucketOf(r):-1;
+  return `<div class="stats">`+[[s.played,'Played'],[(s.played?Math.round(100*s.wins/s.played):0)+'%','Won'],[streak,'Streak'],[s.max,'Best streak']]
+      .map(([n,l])=>`<div><strong>${n}</strong><small>${l}</small></div>`).join('')+`</div>`+
+    `<div class="dist"><h3>Moves compared with par</h3>`+BUCKETS.map((l,i)=>
+      `<div class="dist-row"><span>${l}</span><div><div class="dist-bar${i===mine?' me':''}" style="width:${Math.max(8,100*s.dist[i]/mx)}%">${s.dist[i]}</div></div></div>`).join('')+`</div>`+
+    `<p class="countdown">Next board in <b class="cd-time">${countdownText()}</b></p>`;
+}
+
+function openResults(){
+  if(G.mode==='classic') return openClassicResult(G.won);
+  const D=getDaily(),r=loadState(D).result;if(!r) return;
+  const head=r.won?`Key found in ${plural(r.moves,'move')}`:`Mine hit on move ${r.moves}`;
+  const sub=r.won?`${parText(r)}. You used ${r.ammoUsed} of ${plural(r.ammo,'shot')}.`:`Par for this board was ${r.par}. A new board arrives at midnight.`;
+  openSheet(`<h2 class="display">${head}</h2><p class="sub">${sub}</p><pre class="trail" aria-label="Your moves as colored squares">${trailRows(r).join('\n')}</pre>`+
+    `<button class="primary" onclick="shareResult()">${ic('i-share')}Share result</button>`+statsBlock(D,r)+
+    `<div class="sheet-actions">`+(document.getElementById('game').classList.contains('on')?`<button class="secondary" onclick="closeSheet()">See the board</button>`:`<button class="secondary" onclick="closeSheet();deployDaily()">See the board</button>`)+
+    `<button class="secondary" onclick="closeSheet();show('home');selectTab('classic')">Play a classic game</button></div>`);
+}
+
+function openStats(){
+  const D=getDaily();
+  openSheet(`<h2 class="display">Your record</h2><p class="sub">Daily boards only. Your streak grows each day you find the key.</p>`+statsBlock(D,loadState(D).result));
+}
+
+function openClassicResult(won){
+  if(!G.scored){G.best=won&&saveScore(sel,G.steps,G.seed);G.scored=true;}
+  const best=G.best;
+  const head=won?`Key found in ${plural(G.steps,'move')}`:`Mine hit on move ${G.steps}`;
+  const sub=(best?`That's your best ${sel} game so far. `:'')+`You destroyed ${plural(G.cleared.size,'mine')} and had ${plural(G.bullets,'shot')} left. Map seed ${G.seed}.`;
+  openSheet(`<h2 class="display">${head}</h2><p class="sub">${sub}</p><div class="sheet-actions">`+
+    `<button class="primary" onclick="closeSheet();deployGame(genSeed())">Play a new map</button>`+
+    `<button class="secondary" onclick="closeSheet();deployGame(${G.seed})">Replay this map</button>`+
+    `<button class="secondary" onclick="closeSheet()">See the board</button></div>`);
+}
+
+function openHelp(){
+  const demo=(cls,inner='')=>`<span class="t ${cls}">${inner}</span>`;
+  openSheet(`<h2 class="display">How to play</h2><p class="sub">Drive your tank to the hidden key without hitting a mine.</p><ul class="help-list">`+
+    `<li><span class="tank-demo"><svg viewBox="0 0 32 32"><use href="#tank-art"/></svg></span><span>Move one tile at a time. Tap a tile next to the tank, or use the arrow keys.</span></li>`+
+    `<li>${demo('open c2','2')}<span>Every tile you've driven on shows how many mines touch it: above, below, left and right. Diagonals don't count.</span></li>`+
+    `<li>${demo('key',ic('i-key'))}<span>On daily boards, key distance tells you how many steps away the key is. Use it to narrow down where the key is.</span></li>`+
+    `<li>${demo('open',ic('i-shoot'))}<span>Shoot a neighbouring tile to destroy a mine. A miss proves the tile is safe. Shots are limited.</span></li>`+
+    `<li>${demo('fog flag',ic('i-flag'))}<span>Flag tiles you think hide a mine. The tank won't drive onto a flagged tile.</span></li>`+
+    `<li>${demo('open',ic('i-calendar'))}<span>Everyone gets the same board each day, and it gets harder from Monday to Sunday. Par is how many moves our solver needed using logic alone.</span></li>`+
+    `</ul><div class="sheet-actions"><button class="primary" onclick="closeSheet()">Got it</button></div>`);
+  saveJSON('swank-help-seen',true);
+}
+
+// ── sharing ──
+function trailRows(r){const rows=[];for(let i=0;i<r.trail.length;i+=10)rows.push(r.trail.slice(i,i+10).join(''));return rows;}
+
+function shareText(D,r){
+  const head=`Swank No. ${D.no} ${r.won?'🗝️ '+parShort(r):'💥'}`;
+  const line=r.won?`${titleCase(TIERS[D.tier].rank)}, ${plural(r.moves,'move')} (par ${r.par}), ${r.ammoUsed}/${r.ammo} shots`
+                  :`${titleCase(TIERS[D.tier].rank)}, mine on move ${r.moves}, ${r.ammoUsed}/${r.ammo} shots`;
+  const url=/^https?:$/.test(location.protocol)&&!/^(localhost|127\.|10\.|192\.168\.)/.test(location.hostname)?'\n'+location.origin+location.pathname:'';
+  return head+'\n'+line+'\n'+trailRows(r).join('\n')+url;
+}
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),1800);}
+
+async function shareResult(){
+  const D=getDaily(),r=loadState(D).result;if(!r)return;
+  const text=shareText(D,r);
+  if(navigator.share&&matchMedia('(pointer:coarse)').matches){try{await navigator.share({text});return;}catch(e){if(e.name==='AbortError')return;}}
+  try{await navigator.clipboard.writeText(text);toast('Copied to clipboard');return;}catch{}
+  const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+  const ok=document.execCommand('copy');ta.remove();toast(ok?'Copied to clipboard':"Couldn't copy. Select the squares and copy them yourself.");
+}
+
+// ── countdown ──
+function countdownText(){
+  const now=new Date(),next=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+  const s=Math.max(0,Math.floor((next-now)/1000));
+  return [Math.floor(s/3600),Math.floor(s/60)%60,s%60].map(n=>String(n).padStart(2,'0')).join(':');
+}
+function tick(){
+  const txt=countdownText();
+  document.querySelectorAll('.cd-time').forEach(el=>el.textContent=txt);
+  // The day rolled over while the menu was open: show the new board.
+  if(_daily&&!_daily.preview&&_daily.date!==dailyDate()&&document.getElementById('home').classList.contains('on')) renderDailyCard();
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  renderDailyCard();renderScores();tick();setInterval(tick,1000);
+  if(!loadJSON('swank-help-seen',false)) openHelp();
+});
+</script>
+</body>
+</html>
