@@ -60,6 +60,8 @@ body {
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 :focus-visible { outline: 3px solid var(--key); outline-offset: 2px; border-radius: 6px; }
 .i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+[hidden] { display: none !important; }
+.retry-btn { margin-top: 10px; }
 .view { display: none; }
 .view.on { display: block; }
 .pane { display: none; }
@@ -257,6 +259,7 @@ button { font: inherit; color: inherit; background: none; border: 0; cursor: poi
     <div id="pane-daily" class="pane on">
       <div id="daily-card"></div>
       <button class="primary" id="daily-btn" onclick="deployDaily()">Play today's board</button>
+      <button class="secondary retry-btn" id="retry-btn" onclick="deployRetry()" hidden>Try again (doesn't count)</button>
       <p class="countdown">Next board in <b class="cd-time">--:--:--</b></p>
     </div>
 
@@ -474,11 +477,13 @@ function genCandidate(rng, T) {
   far = Math.max(...cells.map(([x,y]) => d[y][x]));
   const [kx,ky] = pick(rng, cells.filter(([x,y]) => d[y][x] >= Math.ceil(far*0.65)));
   b.key = { x:kx, y:ky };
-  const target = Math.max(1, Math.round(T.density*cells.length + (rng()-0.5)*2));
+  // The start and the tiles right next to it are always clear, so the first move is never a guess.
+  const clear = new Set([pk(sx,sy), pk(kx,ky), ...nbrs(b,sx,sy).map(([x,y]) => pk(x,y))]);
+  const open = cells.filter(([x,y]) => !clear.has(pk(x,y)));
+  const target = Math.min(open.length, Math.max(1, Math.round(T.density*cells.length + (rng()-0.5)*2)));
   b.mines = new Set();
   while (b.mines.size < target) {
-    const [x,y] = pick(rng, cells);
-    if ((x === sx && y === sy) || (x === kx && y === ky)) continue;
+    const [x,y] = pick(rng, open);
     b.mines.add(pk(x,y));
   }
   return b;
@@ -609,7 +614,7 @@ function startGame(b, mode, seed) {
 }
 
 // Daily moves are recorded so a refresh resumes the same game instead of granting a fresh attempt.
-function rec(a) { if (G.mode==='daily'&&!G.silent) { G.state.actions.push(a); saveState(getDaily(),G.state); } }
+function rec(a) { if (G.mode==='daily'&&!G.silent&&!G.unofficial) { G.state.actions.push(a); saveState(getDaily(),G.state); } }
 function applyAction(a) { if (a[0]==='m') move(a[1],a[2]); else if (a[0]==='s') shoot(a[1],a[2]); else if (a[0]==='f') toggleFlag(a[1],a[2]); }
 
 const DIR_MAP={'1,0':'east','-1,0':'west','0,-1':'north','0,1':'south'};
@@ -683,6 +688,7 @@ function finishDaily(won) {
   if (G.mode!=='daily'||G.state.result) return;
   const D=getDaily(), b=G.b;
   G.state.result={won,moves:G.steps,par:b.par,ammoUsed:G.shotsFired,ammo:b.ammo,destroyed:G.cleared.size,trail:G.trail.slice()};
+  if (G.unofficial) return;
   saveState(D,G.state); recordResult(D,G.state.result);
 }
 
@@ -908,6 +914,7 @@ function renderDailyCard(){
     `<div class="rank"><span>${titleCase(T.rank)}</span><span class="pips" aria-label="Difficulty ${D.tier+1} of 7">${Array.from({length:7},(_,i)=>`<span class="${i<=D.tier?'on':''}"></span>`).join('')}</span></div>`+
     `<p class="brief">${SHAPE_TEXT[b.shape]}, ${b.W} by ${b.H}, with ${b.mines.size} mines. You have ${plural(b.ammo,'shot')}.</p>`+note;
   document.getElementById('daily-btn').textContent=st.result?"See today's result":moves?"Resume today's board":"Play today's board";
+  document.getElementById('retry-btn').hidden=!(st.result&&!st.result.won);
 }
 
 function renderScores(){
@@ -939,13 +946,36 @@ function statsBlock(D,r){
 
 function openResults(){
   if(G.mode==='classic') return openClassicResult(G.won);
+  if(G.unofficial&&document.getElementById('game').classList.contains('on')) return openRetryResult();
   const D=getDaily(),r=loadState(D).result;if(!r) return;
   const head=r.won?`Key found in ${plural(r.moves,'move')}`:`Mine hit on move ${r.moves}`;
   const sub=r.won?`${parText(r)}. You used ${r.ammoUsed} of ${plural(r.ammo,'shot')}.`:`Par for this board was ${r.par}. A new board arrives at midnight.`;
   openSheet(`<h2 class="display">${head}</h2><p class="sub">${sub}</p><pre class="trail" aria-label="Your moves as colored squares">${trailRows(r).join('\n')}</pre>`+
     `<button class="primary" onclick="shareResult()">${ic('i-share')}Share result</button>`+statsBlock(D,r)+
     `<div class="sheet-actions">`+(document.getElementById('game').classList.contains('on')?`<button class="secondary" onclick="closeSheet()">See the board</button>`:`<button class="secondary" onclick="closeSheet();deployDaily()">See the board</button>`)+
+    (r.won?'':`<button class="secondary" onclick="closeSheet();deployRetry()">Try again (doesn't count)</button>`)+
     `<button class="secondary" onclick="closeSheet();show('home');selectTab('classic')">Play a classic game</button></div>`);
+}
+
+// Practice run on today's board after the official attempt: same board, nothing saved or counted.
+function deployRetry(){
+  playAudio('click');
+  const D=getDaily();
+  startGame(D.board,'daily',D.date);
+  G.unofficial=true; G.state={actions:[],result:null};
+  say("Practice run. This one doesn't count. "+G.msg);
+  enterGame(D.op);
+}
+
+function openRetryResult(){
+  const r=G.state.result,official=loadState(getDaily()).result;
+  const head=r.won?`Key found in ${plural(r.moves,'move')}`:`Mine hit on move ${r.moves}`;
+  const sub=`Practice run, so it doesn't count. `+(r.won?`${parText(r)}.`:`Par is ${r.par}.`)+
+    (official?` Your official result today: ${official.won?`key found in ${plural(official.moves,'move')}`:`mine hit on move ${official.moves}`}.`:'');
+  openSheet(`<h2 class="display">${head}</h2><p class="sub">${sub}</p><div class="sheet-actions">`+
+    `<button class="primary" onclick="closeSheet();deployRetry()">Try again (doesn't count)</button>`+
+    `<button class="secondary" onclick="closeSheet()">See the board</button>`+
+    `<button class="secondary" onclick="closeSheet();show('home')">Back to menu</button></div>`);
 }
 
 function openStats(){
